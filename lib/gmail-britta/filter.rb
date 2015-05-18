@@ -85,6 +85,8 @@ module GmailBritta
     def otherwise(&block)
       filter = Filter.new(@britta, :log => @log).perform(&block)
       filter.merge_negated_criteria(self)
+
+      @log.debug("\nOTHERWISE")
       filter.log_definition
       filter
     end
@@ -97,8 +99,23 @@ module GmailBritta
     def also(&block)
       filter = Filter.new(@britta, :log => @log).perform(&block)
       filter.merge_positive_criteria(self)
+
+      @log.debug("\nALSO")
       filter.log_definition
       filter
+    end
+
+    SMART_LABELS = {
+      :primary => '^smartlabel_personal',
+      :social => '^smartlabel_social',
+      :promotions => '^smartlabel_promo',
+      :updates => '^smartlabel_notification',
+      :forums => '^smartlabel_group'
+    }
+    single_write_accessor :categorize, 'smartLabelToApply' do |name|
+      fail "categorize requires one of: " + SMART_LABELS.keys.join(', ') \
+        unless SMART_LABELS.include? name.intern
+      SMART_LABELS[name.intern]
     end
 
     # Register (but don't return) a filter that archives the message
@@ -112,17 +129,23 @@ module GmailBritta
     # @return [Filter] the current (not the newly-constructed filter)
     def archive_unless_directed(options={})
       mark_as_read=options[:mark_read]
-      tos=Array(options[:to] || me)
       filter = Filter.new(@britta, :log => @log).perform do
-        has_not [{:or => tos.map {|to| "to:#{to}"}}]
+        not_to_me options
         archive
         if mark_as_read
           mark_read
         end
       end
       filter.merge_positive_criteria(self)
+
+      @log.debug("\nARCHIVE UNLESS DIRECTED")
       filter.log_definition
       self
+    end
+
+    def not_to_me(options={})
+      tos=Array(options[:to] || me)
+      has_not [{:or => tos.map {|to| "to:#{to}"}}]
     end
 
     # Create a new filter object
@@ -158,6 +181,18 @@ ATOM
     def perform(&block)
       instance_eval(&block)
       @britta.filters << self
+      self
+    end
+
+    # Note a filter definition on the logger.
+    # @note for debugging only.
+    def log_definition
+      return unless @log.debug?
+      @log.debug  "Filter: #{self}"
+      Filter.single_write_accessors.each do |name, gmail_name|
+        val = instance_variable_get(Filter.ivar_name(name))
+        @log.debug "  #{name}: #{val}" if val
+      end
       self
     end
 
@@ -215,18 +250,6 @@ ATOM
         str << ')' if recursive
       end
       str
-    end
-
-    # Note a filter definition on the logger.
-    # @note for debugging only.
-    def log_definition
-      return unless @log.debug?
-      @log.debug  "Filter: #{self}"
-      Filter.single_write_accessors.each do |name, gmail_name|
-        val = instance_variable_get(Filter.ivar_name(name))
-        @log.debug "  #{name}: #{val}" if val
-      end
-      self
     end
 
     # Return the list of emails that the filterset has configured as "me".

@@ -60,7 +60,9 @@ ATOM
       # @yield [] the {Filter} definition block, with the new {Filter} instance as `self`.
       # @return [Filtere] the new filter.
       def filter(&block)
-        GmailBritta::Filter.new(@britta, :log => @log).perform(&block)
+        @log.debug("\nFILTER")
+        GmailBritta::Filter.new(@britta, :log => @log).perform(&block) \
+          .log_definition
       end
 
       # Evaluate the {FilterSet} definition block with the {Delegate} object as `self`
